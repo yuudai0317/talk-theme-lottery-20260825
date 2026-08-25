@@ -1,0 +1,11 @@
+{
+  "name": "talk-theme-lottery",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@netlify/blobs": "^11.0.1"
+  },
+  "devDependencies": {
+    "@netlify/functions": "^6.0.0"
+  }
+}
