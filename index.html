@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>トークテーマくじ引き｜交流会</title>
+<style>
+/* ============================================================
+   配色・タイポトークン
+   ============================================================ */
+:root{
+  --ink:        #0C2523;  /* 背景（深い墨緑） */
+  --ink-2:      #10322E;  /* パネル */
+  --ink-3:      #1B4640;  /* 罫線・境界 */
+  --paper:      #EDE6D6;  /* 札の紙色 */
+  --paper-2:    #E2D9C4;  /* 札の紙色（影側） */
+  --text-dark:  #14302C;  /* 札の上の文字 */
+  --text-light: #E8EFEC;  /* 暗い背景の上の文字 */
+  --muted:      #7E9B95;  /* 補助文字 */
+  --brass:      #D9A93F;  /* アクセント（真鍮） */
+  --vermilion:  #C0402B;  /* 朱（決定印） */
+
+  --mincho: "Hiragino Mincho ProN","Hiragino Mincho Pro","Yu Mincho","YuMincho","Noto Serif JP","Source Han Serif JP",serif;
+  --gothic: system-ui,-apple-system,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic","YuGothic",sans-serif;
+}
+
+*{box-sizing:border-box;}
+html,body{height:100%;margin:0;}
+body{
+  background:
+    radial-gradient(120% 90% at 50% 0%, #14413A 0%, var(--ink) 62%, #071A19 100%);
+  color:var(--text-light);
+  font-family:var(--gothic);
+  overflow:hidden;
+}
+button,input,textarea{font-family:inherit;}
+:focus-visible{outline:2px solid var(--brass);outline-offset:2px;}
+
+/* ============================================================
+   全体レイアウト（16:9を基本に可変）
+   ============================================================ */
+.app{
+  position:relative;
+  height:100%;
+  display:grid;
+  grid-template-rows:auto 1fr auto;
+}
+
+/* --- ヘッダ --- */
+.top{
+  display:flex;align-items:baseline;justify-content:space-between;
+  gap:16px;padding:clamp(12px,1.6vw,24px) clamp(16px,2.4vw,40px);
+}
+.brand{display:flex;align-items:baseline;gap:.6em;}
+.brand b{
+  font-family:var(--mincho);font-weight:600;
+  font-size:clamp(15px,1.5vw,22px);letter-spacing:.14em;
+}
+.brand span{
+  font-size:clamp(10px,.85vw,12px);letter-spacing:.34em;
+  color:var(--muted);text-transform:uppercase;
+}
+.counts{display:flex;gap:clamp(10px,1.4vw,22px);align-items:baseline;}
+.count{display:flex;align-items:baseline;gap:.4em;}
+.count i{
+  font-style:normal;font-size:clamp(9px,.8vw,11px);
+  letter-spacing:.24em;color:var(--muted);
+}
+.count b{
+  font-family:var(--mincho);font-size:clamp(17px,1.9vw,28px);
+  font-weight:600;color:var(--brass);font-variant-numeric:tabular-nums;
+}
+
+/* --- 舞台（クリックで抽選） --- */
+.stage{
+  position:relative;display:grid;place-items:center;
+  padding:0 clamp(16px,3vw,56px);cursor:pointer;min-height:0;
+}
+.stage::after{ /* 押せることを示す控えめなヒント */
+  content:attr(data-hint);
+  position:absolute;bottom:0;left:50%;transform:translateX(-50%);
+  font-size:clamp(10px,.85vw,12px);letter-spacing:.22em;color:var(--muted);
+  opacity:.75;pointer-events:none;
+}
+
+/* --- 札（くじ） --- */
+.fuda{
+  position:relative;
+  width:min(84vw,1180px);
+  height:min(58vh,540px);
+  background:linear-gradient(158deg,var(--paper) 0%,var(--paper-2) 100%);
+  color:var(--text-dark);
+  clip-path:polygon(
+    12% 0%, 88% 0%, 100% 11%, 100% 89%,
+    88% 100%, 12% 100%, 0% 89%, 0% 11%);
+  box-shadow:0 26px 60px rgba(0,0,0,.5), 0 2px 0 rgba(255,255,255,.16) inset;
+  display:grid;place-items:center;
+  transition:transform .5s cubic-bezier(.16,1,.3,1), filter .5s;
+}
+.fuda::before{ /* 内側の二重罫 */
+  content:"";position:absolute;inset:clamp(12px,1.4vw,22px);
+  border:1px solid rgba(20,48,44,.28);
+  box-shadow:0 0 0 4px var(--paper) , 0 0 0 5px rgba(20,48,44,.14);
+  pointer-events:none;
+}
+.fuda.spinning{animation:hum .32s ease-in-out infinite alternate;}
+@keyframes hum{from{transform:translateY(0) rotate(-.15deg);}to{transform:translateY(-5px) rotate(.15deg);}}
+.fuda.decided{filter:drop-shadow(0 0 26px rgba(217,169,63,.5));}
+
+.themeBox{
+  position:relative;z-index:1;
+  width:calc(100% - clamp(56px,7vw,110px));
+  height:calc(100% - clamp(56px,7vw,110px));
+  display:grid;place-items:center;overflow:hidden;
+}
+.themeText{
+  font-family:var(--mincho);font-weight:600;
+  line-height:1.34;letter-spacing:.02em;text-align:center;
+  font-size:6vw; /* JSが自動調整 */
+  overflow-wrap:anywhere;word-break:normal;line-break:strict;
+  text-wrap:balance;      /* 行の長さを揃え、最終行が極端に短くならないようにする */
+  max-width:100%;
+}
+.themeText.flick{animation:flick .09s steps(2,end);}
+@keyframes flick{from{opacity:.28;transform:translateY(2px);}to{opacity:1;transform:none;}}
+.themeText.pop{animation:pop .58s cubic-bezier(.16,1,.3,1);}
+@keyframes pop{
+  0%{opacity:0;transform:scale(.86);}
+  60%{opacity:1;transform:scale(1.035);}
+  100%{opacity:1;transform:scale(1);}
+}
+.themeText.idle{color:#5C7370;font-weight:400;}
+
+/* 決定印（この画面の主役） */
+.seal{
+  position:absolute;z-index:2;
+  right:clamp(14px,2.4vw,40px);bottom:clamp(10px,2vw,32px);
+  width:clamp(64px,7.6vw,124px);aspect-ratio:1;
+  display:grid;place-items:center;
+  border:3px solid var(--vermilion);border-radius:50%;
+  color:var(--vermilion);
+  font-family:var(--mincho);font-weight:700;
+  font-size:clamp(19px,2.3vw,38px);letter-spacing:.06em;
+  opacity:0;transform:scale(2.6) rotate(-24deg);
+  mix-blend-mode:multiply;
+}
+.seal.on{animation:stamp .42s cubic-bezier(.2,1.5,.4,1) forwards;}
+@keyframes stamp{
+  0%{opacity:0;transform:scale(2.6) rotate(-24deg);}
+  70%{opacity:.95;transform:scale(.94) rotate(-8deg);}
+  100%{opacity:.9;transform:scale(1) rotate(-9deg);}
+}
+
+/* --- 操作列 --- */
+.bottom{
+  display:flex;align-items:center;justify-content:center;gap:clamp(8px,1.1vw,16px);
+  flex-wrap:wrap;padding:clamp(12px,1.8vw,28px) clamp(16px,2.4vw,40px);
+}
+.btn{
+  appearance:none;cursor:pointer;
+  background:transparent;color:var(--text-light);
+  border:1px solid var(--ink-3);border-radius:999px;
+  padding:.7em 1.5em;font-size:clamp(12px,1vw,14px);letter-spacing:.1em;
+  transition:background .18s,border-color .18s,color .18s,transform .18s;
+}
+.btn:hover:not(:disabled){background:var(--ink-2);border-color:var(--brass);}
+.btn:active:not(:disabled){transform:translateY(1px);}
+.btn:disabled{opacity:.34;cursor:not-allowed;}
+.btn.primary{
+  background:var(--brass);border-color:var(--brass);color:#22190A;
+  font-weight:700;padding:.82em 2.4em;letter-spacing:.16em;
+  font-size:clamp(13px,1.15vw,17px);
+}
+.btn.primary:hover:not(:disabled){background:#E7BC55;border-color:#E7BC55;}
+.btn.ghost{border-color:transparent;color:var(--muted);}
+.btn.ghost:hover{color:var(--text-light);background:var(--ink-2);}
+.btn.danger{border-color:#5A2B24;color:#E39082;}
+.btn.danger:hover{background:#3A1A15;border-color:#C0402B;}
+
+/* ============================================================
+   設定パネル（右からのドロワー）
+   ============================================================ */
+.drawer{
+  position:fixed;top:0;right:0;height:100%;
+  width:min(440px,100%);
+  background:var(--ink-2);border-left:1px solid var(--ink-3);
+  box-shadow:-24px 0 60px rgba(0,0,0,.45);
+  transform:translateX(101%);transition:transform .34s cubic-bezier(.16,1,.3,1);
+  display:flex;flex-direction:column;z-index:20;
+}
+.drawer.open{transform:none;}
+.drawer header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:20px 22px 14px;border-bottom:1px solid var(--ink-3);
+}
+.drawer h2{
+  margin:0;font-family:var(--mincho);font-weight:600;
+  font-size:17px;letter-spacing:.14em;
+}
+.drawer .body{overflow-y:auto;padding:20px 22px 40px;}
+.sect{margin-bottom:30px;}
+.sect > h3{
+  margin:0 0 10px;font-size:10px;letter-spacing:.26em;
+  color:var(--brass);font-weight:600;
+}
+.hint{margin:0 0 10px;font-size:12px;line-height:1.75;color:var(--muted);}
+textarea{
+  width:100%;min-height:150px;resize:vertical;
+  background:#0A2220;color:var(--text-light);
+  border:1px solid var(--ink-3);border-radius:6px;
+  padding:12px 13px;font-size:13.5px;line-height:1.85;
+}
+textarea::placeholder{color:#527069;}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+.notice{
+  margin-top:10px;font-size:12px;line-height:1.7;color:var(--brass);
+  min-height:1.7em;
+}
+.notice.warn{color:#E39082;}
+
+/* テーマ一覧（各行がそのまま編集欄） */
+.list{list-style:none;margin:0;padding:0;}
+.list li{
+  display:flex;align-items:center;gap:8px;
+  padding:5px 0;border-bottom:1px dashed var(--ink-3);
+}
+.list .no{
+  flex:0 0 2.1em;text-align:right;
+  font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;
+}
+.list input{
+  flex:1;min-width:0;background:transparent;color:var(--text-light);
+  border:1px solid transparent;border-radius:4px;
+  padding:6px 8px;font-size:13.5px;
+}
+.list input:hover{border-color:var(--ink-3);}
+.list input:focus{border-color:var(--brass);background:#0A2220;}
+.list input.done{color:#5F817B;text-decoration:line-through;}
+.del{
+  flex:0 0 auto;appearance:none;cursor:pointer;
+  background:transparent;border:1px solid var(--ink-3);border-radius:4px;
+  color:var(--muted);width:28px;height:28px;font-size:14px;line-height:1;
+}
+.del:hover{color:#E39082;border-color:#C0402B;}
+.empty{font-size:12.5px;color:var(--muted);padding:8px 0;}
+
+/* トグル */
+.toggle{
+  display:flex;align-items:flex-start;gap:11px;
+  padding:11px 0;border-bottom:1px solid var(--ink-3);cursor:pointer;
+}
+.toggle:last-child{border-bottom:none;}
+.toggle input{
+  appearance:none;margin:2px 0 0;flex:0 0 auto;
+  width:38px;height:21px;border-radius:999px;
+  background:#0A2220;border:1px solid var(--ink-3);
+  position:relative;cursor:pointer;transition:background .2s,border-color .2s;
+}
+.toggle input::after{
+  content:"";position:absolute;top:2px;left:2px;
+  width:15px;height:15px;border-radius:50%;
+  background:var(--muted);transition:transform .2s,background .2s;
+}
+.toggle input:checked{background:#3D3213;border-color:var(--brass);}
+.toggle input:checked::after{transform:translateX(17px);background:var(--brass);}
+.toggle .tx{font-size:13.5px;line-height:1.55;}
+.toggle .tx small{display:block;font-size:11.5px;color:var(--muted);margin-top:3px;}
+
+/* 履歴 */
+.hist{list-style:none;margin:0;padding:0;}
+.hist li{
+  display:flex;gap:10px;padding:7px 0;font-size:13px;
+  border-bottom:1px dashed var(--ink-3);
+}
+.hist .n{
+  flex:0 0 1.9em;color:var(--brass);font-variant-numeric:tabular-nums;font-size:11.5px;
+}
+
+.scrim{
+  position:fixed;inset:0;background:rgba(4,16,15,.6);
+  opacity:0;pointer-events:none;transition:opacity .3s;z-index:15;
+}
+.scrim.on{opacity:1;pointer-events:auto;}
+
+/* ============================================================
+   狭い画面
+   ============================================================ */
+@media (max-width:760px){
+  .fuda{width:92vw;height:min(52vh,420px);}
+  .themeText{line-height:1.42;}
+  .top{flex-direction:column;gap:8px;align-items:flex-start;}
+  .btn{padding:.68em 1.15em;}
+  .btn.primary{padding:.8em 1.8em;}
+  .stage::after{display:none;}
+}
+@media (prefers-reduced-motion:reduce){
+  .fuda.spinning{animation:none;}
+  .themeText.flick,.themeText.pop,.seal.on{animation-duration:.01s;}
+  .seal.on{opacity:.9;transform:scale(1) rotate(-9deg);}
+  *{transition-duration:.01s !important;}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="top">
+    <div class="brand">
+      <b>トークテーマくじ引き</b><span>merit</span>
+    </div>
+    <div class="counts">
+      <div class="count"><i>残り</i><b id="cRemain">0</b></div>
+      <div class="count"><i>登録</i><b id="cTotal">0</b></div>
+      <div class="count"><i>履歴</i><b id="cHist">0</b></div>
+    </div>
+  </div>
+
+  <div class="stage" id="stage" data-hint="画面またはスペースキーでスタート">
+    <div class="fuda" id="fuda">
+      <div class="themeBox" id="themeBox">
+        <div class="themeText idle" id="themeText">スタートを押してください</div>
+      </div>
+      <div class="seal" id="seal">決定</div>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <button class="btn primary" id="btnStart">スタート</button>
+    <button class="btn" id="btnSettings">テーマを編集</button>
+    <button class="btn ghost" id="btnReset">履歴と除外をリセット</button>
+    <button class="btn ghost" id="btnFull">全画面表示</button>
+  </div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+
+<aside class="drawer" id="drawer" aria-label="設定">
+  <header>
+    <h2>テーマと設定</h2>
+    <button class="btn ghost" id="btnClose">閉じる</button>
+  </header>
+  <div class="body">
+
+    <div class="sect">
+      <h3>テーマを入力</h3>
+      <p class="hint">1行に1テーマ。改行を含むテキストをそのまま貼り付けると、1行ずつ別のテーマになります。行頭の「・」「-」「1.」などの記号は自動で外します。</p>
+      <textarea id="input" placeholder="最近ハマっていること&#10;人生で一番おいしかった食べ物&#10;学生時代に戻れたらやりたいこと"></textarea>
+      <div class="row">
+        <button class="btn primary" id="btnReplace">登録</button>
+        <button class="btn" id="btnAppend">追加で登録</button>
+        <button class="btn ghost" id="btnClearInput">入力欄を空にする</button>
+      </div>
+      <p class="notice" id="notice"></p>
+    </div>
+
+    <div class="sect">
+      <h3>テーマの共有</h3>
+      <p class="hint">リンクを開いた人は、共有された最新のテーマを自動で受け取ります。ボタンを押す必要はありません。</p>
+      <label class="toggle">
+        <input type="checkbox" id="optSync">
+        <span class="tx">この端末の変更を共有する
+          <small id="syncNote">オンにすると、この端末で編集した内容がリンクを開いた全員に反映されます。オフの端末は受け取るだけです。</small></span>
+      </label>
+      <div class="row">
+        <button class="btn ghost" id="btnSyncNow">今すぐ確認</button>
+      </div>
+      <p class="notice" id="syncStatus"></p>
+      <p class="hint" id="syncHint"></p>
+    </div>
+
+    <div class="sect">
+      <h3>登録済みのテーマ</h3>
+      <p class="hint">文字をクリックするとその場で直せます。</p>
+      <ul class="list" id="list"></ul>
+      <div class="row">
+        <button class="btn danger" id="btnDeleteAll">すべて削除</button>
+      </div>
+    </div>
+
+    <div class="sect">
+      <h3>抽選の設定</h3>
+      <label class="toggle">
+        <input type="checkbox" id="optExclude" checked>
+        <span class="tx">一度出たテーマを除外する
+          <small>全部出たら「全テーマ終了」と表示します。</small></span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="optSound">
+        <span class="tx">効果音を鳴らす
+          <small>回転中のカチカチ音と、決定音が鳴ります。</small></span>
+      </label>
+    </div>
+
+    <div class="sect">
+      <h3>出た順の履歴</h3>
+      <ul class="hist" id="hist"></ul>
+      <div class="row">
+        <button class="btn ghost" id="btnClearHist">履歴を消す</button>
+      </div>
+    </div>
+
+  </div>
+</aside>
+
+<script>
+/* ============================================================
+   1. 初期サンプルテーマ ★ここを書き換えれば初期値が変わります
+   ============================================================ */
+const SAMPLE_THEMES = [
+  "最近ハマっていること",
+  "人生で一番おいしかった食べ物",
+  "休日の過ごし方",
+  "最近ちょっと嬉しかったこと",
+  "学生時代に戻れたらやりたいこと",
+  "行ってみたい国と、その理由",
+  "自分の意外な特技",
+  "もう一度観たい映画・ドラマ",
+  "10年後の自分は何をしていそうか",
+  "今日ここに来た理由"
+];
+
+/* ------------------------------------------------------------
+   状態（すべてメモリ内。ページを閉じると消えます）
+   ローカルに保存して使い回したい場合は、themes を localStorage に
+   保存する処理をここに追加してください。
+   ------------------------------------------------------------ */
+let themes  = SAMPLE_THEMES.slice();
+let drawn   = [];      // 出たテーマ（履歴と除外に使う）
+let spinning = false;
+let timer    = null;
+let lastShown = null;
+
+const $ = id => document.getElementById(id);
+const el = {
+  stage:$("stage"), fuda:$("fuda"), themeBox:$("themeBox"), themeText:$("themeText"),
+  seal:$("seal"), start:$("btnStart"), notice:$("notice"),
+  cRemain:$("cRemain"), cTotal:$("cTotal"), cHist:$("cHist"),
+  list:$("list"), hist:$("hist"), input:$("input"),
+  drawer:$("drawer"), scrim:$("scrim"),
+  optExclude:$("optExclude"), optSound:$("optSound"),
+  optSync:$("optSync"), syncNote:$("syncNote"), syncStatus:$("syncStatus"),
+  syncHint:$("syncHint")
+};
+
+/* ============================================================
+   2. テーマの分割・正規化 ★改行ペースト対応の中心部分
+   ============================================================ */
+// 行頭の箇条書き記号・連番を落とすためのパターン
+const BULLET = /^[\s\u3000]*(?:[・･‧⋅\-–—ー‐*＊+＋●○◯■□▪▫◆◇>＞»→]|[0-9０-９]{1,3}\s*[.)．）、，:：]|[（(]\s*[0-9０-９]{1,3}\s*[)）]|[①-⑳㉑-㉟]|[⑴-⒇]|[ⅰ-ⅹ]\s*[.)．）])\s*/;
+
+function parseLines(raw){
+  // 改行（CRLF / CR / LF）とタブで分割。Excelの列コピーにも対応。
+  const rawLines = String(raw).split(/\r\n|\r|\n|\t/);
+  const out = [];
+  let dup = 0;
+  const seen = new Set(themesKeySetFromNothing());
+
+  for(let line of rawLines){
+    line = line.replace(/[\u3000\s]+/g," ");        // 全角スペース・連続空白を1つに
+    line = line.trim();
+    if(!line) continue;                              // 空行は無視
+    line = line.replace(BULLET,"").trim();           // 行頭記号・連番を除去
+    line = line.replace(/^"(.*)"$/,"$1").replace(/""/g,'"').trim(); // Excelの引用符
+    if(!line) continue;
+    const key = line;
+    if(seen.has(key)){ dup++; continue; }            // 貼り付け内での重複
+    seen.add(key);
+    out.push(line);
+  }
+  return {items:out, dup:dup};
+}
+function themesKeySetFromNothing(){ return []; }      // 分割時は入力内の重複のみ判定
+
+/* ============================================================
+   3. 登録・一覧・履歴の描画
+   ============================================================ */
+function setNotice(msg, warn){
+  el.notice.textContent = msg || "";
+  el.notice.classList.toggle("warn", !!warn);
+}
+
+function candidates(){
+  if(!el.optExclude.checked) return themes.slice();
+  return themes.filter(t => !drawn.includes(t));
+}
+
+function render(){
+  // 件数
+  el.cTotal.textContent  = themes.length;
+  el.cRemain.textContent = candidates().length;
+  el.cHist.textContent   = drawn.length;
+
+  // 一覧（行がそのまま編集欄）
+  el.list.innerHTML = "";
+  if(themes.length === 0){
+    const p = document.createElement("li");
+    p.className = "empty";
+    p.textContent = "まだテーマがありません。上の欄に入力して登録してください。";
+    el.list.appendChild(p);
+  }else{
+    themes.forEach((t,i)=>{
+      const li = document.createElement("li");
+
+      const no = document.createElement("span");
+      no.className = "no"; no.textContent = (i+1);
+
+      const inp = document.createElement("input");
+      inp.type = "text"; inp.value = t;
+      inp.setAttribute("aria-label", (i+1)+"番目のテーマ");
+      if(drawn.includes(t)) inp.classList.add("done");
+      inp.addEventListener("change", ()=>{
+        const v = inp.value.trim();
+        if(!v){ themes.splice(i,1); }
+        else   { themes[i] = v; }
+        render();
+        setNotice("テーマを更新しました。");
+      });
+
+      const del = document.createElement("button");
+      del.className = "del"; del.type = "button";
+      del.textContent = "×";
+      del.setAttribute("aria-label", (i+1)+"番目のテーマを削除");
+      del.addEventListener("click", ()=>{
+        themes.splice(i,1); render();
+        setNotice("1件削除しました。");
+      });
+
+      li.append(no, inp, del);
+      el.list.appendChild(li);
+    });
+  }
+
+  // 履歴
+  el.hist.innerHTML = "";
+  if(drawn.length === 0){
+    const p = document.createElement("li");
+    p.className = "empty"; p.textContent = "まだ引いていません。";
+    el.hist.appendChild(p);
+  }else{
+    drawn.forEach((t,i)=>{
+      const li = document.createElement("li");
+      const n = document.createElement("span");
+      n.className = "n"; n.textContent = (i+1);
+      const s = document.createElement("span"); s.textContent = t;
+      li.append(n,s);
+      el.hist.appendChild(li);
+    });
+  }
+
+  // 内容が変わったらクラウドへ保存を予約
+  if(typeof schedulePush === "function") schedulePush();
+}
+
+function registerThemes(mode){
+  const {items, dup} = parseLines(el.input.value);
+  if(items.length === 0){
+    setNotice("登録できる行がありません。1行に1テーマで入力してください。", true);
+    return;
+  }
+  let dupExisting = 0;
+  if(mode === "replace"){
+    themes = items;
+    drawn = [];
+  }else{
+    items.forEach(t=>{
+      if(themes.includes(t)) dupExisting++;
+      else themes.push(t);
+    });
+  }
+  let msg = items.length - dupExisting + "件のテーマを登録しました。";
+  const skipped = dup + dupExisting;
+  if(skipped > 0) msg += " " + skipped + "件を重複として除外しました。";
+  if(mode === "replace") msg += " 履歴もリセットしました。";
+  setNotice(msg);
+  el.input.value = "";
+  resetStage();
+  render();
+}
+
+/* ============================================================
+   4. 文字サイズの自動調整
+   ============================================================ */
+function quickSize(text){
+  const len = [...text].length;
+  if(len <=  6) return 9.0;
+  if(len <= 10) return 7.4;
+  if(len <= 14) return 6.2;
+  if(len <= 20) return 5.0;
+  if(len <= 30) return 4.0;
+  if(len <= 44) return 3.2;
+  if(len <= 64) return 2.6;
+  return 2.1;
+}
+// 実際の折り返し位置を調べ、行数と最終行の文字数を返す
+function measureLines(node){
+  const t = node.firstChild;
+  if(!t || t.nodeType !== 3) return {lines:1, last:0};
+  const s = t.textContent;
+  const range = document.createRange();
+  let lastTop = null, lines = 0, count = 0;
+  for(let i = 0; i < s.length; i++){
+    if(/\s/.test(s[i])) continue;
+    range.setStart(t, i); range.setEnd(t, i + 1);
+    const r = range.getBoundingClientRect();
+    if(!r.height) continue;
+    const top = Math.round(r.top);
+    if(lastTop === null || Math.abs(top - lastTop) > 2){ lastTop = top; lines++; count = 1; }
+    else count++;
+  }
+  return {lines: Math.max(lines,1), last: count};
+}
+
+function setText(text, precise){
+  el.themeText.textContent = text;
+  let size = quickSize(text);
+  if(window.innerWidth < 760) size *= 1.55;   // 狭い画面では相対的に大きく
+  el.themeText.style.fontSize = size + "vw";
+  if(!precise) return;
+
+  // はみ出す場合は収まるまで縮める
+  let guard = 0;
+  while(guard < 60 &&
+        (el.themeBox.scrollHeight > el.themeBox.clientHeight + 1 ||
+         el.themeText.scrollWidth > el.themeBox.clientWidth + 1)){
+    size *= 0.95;
+    if(size < 0.8) break;
+    el.themeText.style.fontSize = size + "vw";
+    guard++;
+  }
+
+  // 最終行が1文字だけになる（ぶら下がり）状態を解消する
+  let g2 = 0;
+  while(g2 < 20){
+    const m = measureLines(el.themeText);
+    if(m.lines <= 1 || m.last >= 2) break;
+    size *= 0.96;
+    if(size < 0.8) break;
+    el.themeText.style.fontSize = size + "vw";
+    g2++;
+  }
+}
+
+/* ============================================================
+   5. 効果音（Web Audio。音声ファイルは使いません）
+   ============================================================ */
+let actx = null;
+function beep(freq, dur, vol){
+  if(!el.optSound.checked) return;
+  try{
+    if(!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = "triangle"; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + dur);
+    o.connect(g); g.connect(actx.destination);
+    o.start(); o.stop(actx.currentTime + dur);
+  }catch(e){ /* 音が出せない環境では無視 */ }
+}
+
+/* ============================================================
+   6. 抽選
+   ============================================================ */
+function resetStage(){
+  el.seal.classList.remove("on");
+  el.fuda.classList.remove("decided");
+  el.themeText.classList.remove("pop");
+  el.themeText.classList.add("idle");
+  setText(themes.length ? "スタートを押してください" : "テーマを登録してください", true);
+  el.start.textContent = "スタート";
+  el.start.disabled = false;
+  el.stage.dataset.hint = "画面またはスペースキーでスタート";
+  lastShown = null;
+}
+
+function startDraw(){
+  if(spinning) return;
+
+  if(themes.length === 0){
+    el.themeText.classList.add("idle");
+    setText("テーマを登録してください", true);
+    setNotice("テーマが0件です。まず入力して登録してください。", true);
+    openDrawer(); el.input.focus();
+    return;
+  }
+  const pool = candidates();
+  if(pool.length === 0){
+    el.themeText.classList.remove("idle");
+    el.seal.classList.remove("on");
+    setText("全テーマ終了", true);
+    el.stage.dataset.hint = "「履歴と除外をリセット」で最初から引けます";
+    el.start.disabled = true;
+    el.start.textContent = "全テーマ終了";
+    return;
+  }
+
+  // 結果を先に公平に決める（Math.random による均等抽選）
+  const result = pool[Math.floor(Math.random() * pool.length)];
+
+  spinning = true;
+  closeDrawer();                       // 抽選中は設定パネルを隠す
+  el.start.disabled = true;
+  el.start.textContent = "抽選中…";
+  el.seal.classList.remove("on");
+  el.fuda.classList.remove("decided");
+  el.themeText.classList.remove("idle","pop");
+  el.fuda.classList.add("spinning");
+  el.stage.dataset.hint = "";
+
+  const duration = 3000 + Math.random() * 1000;      // 3〜4秒
+  const fast     = 60   + Math.random() * 20;        // 開始間隔 60〜80ms
+  const slow     = 300  + Math.random() * 200;       // 終盤間隔 300〜500ms
+  const t0 = performance.now();
+
+  function flashOne(avoid){
+    let pick;
+    if(pool.length === 1){
+      pick = pool[0];
+    }else{
+      let guard = 0;
+      do{ pick = pool[Math.floor(Math.random() * pool.length)]; guard++; }
+      while(guard < 24 && (pick === lastShown || pick === avoid));
+    }
+    lastShown = pick;
+    setText(pick, false);
+    el.themeText.classList.remove("flick");
+    void el.themeText.offsetWidth;
+    el.themeText.classList.add("flick");
+  }
+
+  function tick(){
+    const t = Math.min(1, (performance.now() - t0) / duration);
+    if(t >= 1){ decide(result); return; }
+    // 残り時間が少ないときは、最後の1コマに結果が出ないようにしておく
+    flashOne(t > 0.9 ? result : null);
+    beep(1200 - 500 * t, 0.02, 0.05);
+    const wait = fast + (slow - fast) * Math.pow(t, 2.2);   // だんだん遅くなる
+    timer = setTimeout(tick, wait);
+  }
+  tick();
+}
+
+function decide(result){
+  clearTimeout(timer);
+  timer = null;
+  spinning = false;
+  el.fuda.classList.remove("spinning");
+  el.fuda.classList.add("decided");
+
+  el.themeText.classList.remove("flick");
+  setText(result, true);
+  void el.themeText.offsetWidth;
+  el.themeText.classList.add("pop");
+  el.seal.classList.add("on");
+
+  beep(784, 0.14, 0.11);
+  setTimeout(()=>beep(1175, 0.3, 0.09), 120);
+
+  drawn.push(result);
+  render();
+
+  el.start.disabled = false;
+  el.start.textContent = "もう一度";
+  const left = candidates().length;
+  el.stage.dataset.hint = (el.optExclude.checked && left === 0)
+    ? "これで全テーマ終了です"
+    : "画面またはスペースキーでもう一度";
+}
+
+/* ============================================================
+   7. ドロワーとイベント
+   ============================================================ */
+function openDrawer(){
+  el.drawer.classList.add("open");
+  el.scrim.classList.add("on");
+}
+function closeDrawer(){
+  el.drawer.classList.remove("open");
+  el.scrim.classList.remove("on");
+}
+
+$("btnStart").addEventListener("click", startDraw);
+el.stage.addEventListener("click", startDraw);
+$("btnSettings").addEventListener("click", ()=>{
+  el.drawer.classList.contains("open") ? closeDrawer() : openDrawer();
+});
+$("btnClose").addEventListener("click", closeDrawer);
+el.scrim.addEventListener("click", closeDrawer);
+
+$("btnReplace").addEventListener("click", ()=>registerThemes("replace"));
+$("btnAppend").addEventListener("click", ()=>registerThemes("append"));
+$("btnClearInput").addEventListener("click", ()=>{
+  el.input.value = ""; setNotice(""); el.input.focus();
+});
+$("btnDeleteAll").addEventListener("click", ()=>{
+  if(themes.length === 0){ setNotice("削除するテーマがありません。", true); return; }
+  if(!confirm("登録済みのテーマをすべて削除します。よろしいですか？")) return;
+  themes = []; drawn = [];
+  render(); resetStage();
+  setNotice("すべて削除しました。");
+});
+$("btnClearHist").addEventListener("click", ()=>{
+  drawn = []; render(); resetStage();
+  setNotice("履歴を消しました。");
+});
+$("btnReset").addEventListener("click", ()=>{
+  drawn = []; render(); resetStage();
+});
+$("btnFull").addEventListener("click", ()=>{
+  if(document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen?.();
+});
+el.optExclude.addEventListener("change", ()=>{
+  render();
+  if(!spinning && candidates().length > 0 && el.start.disabled === false && el.start.textContent === "全テーマ終了") resetStage();
+  if(!spinning && candidates().length > 0) el.start.disabled = false;
+});
+
+// 貼り付けた直後に件数をプレビュー
+el.input.addEventListener("paste", ()=>{
+  setTimeout(()=>{
+    const {items, dup} = parseLines(el.input.value);
+    let m = items.length + "件のテーマを検出しました。";
+    if(dup > 0) m += " （重複 " + dup + "件は除外されます）";
+    setNotice(items.length ? m : "テーマを検出できませんでした。", !items.length);
+  }, 0);
+});
+el.input.addEventListener("input", ()=>{
+  if(!el.input.value.trim()) setNotice("");
+});
+
+// スペースキーでスタート（入力中は除く）
+document.addEventListener("keydown", e=>{
+  const tag = (e.target.tagName || "").toLowerCase();
+  if(tag === "textarea" || tag === "input"){
+    if(e.key === "Escape") closeDrawer();
+    return;
+  }
+  if(e.code === "Space" || e.key === " "){ e.preventDefault(); startDraw(); }
+  if(e.key === "Escape") closeDrawer();
+});
+
+// 画面サイズが変わったら決定表示を再フィット
+let rz = null;
+window.addEventListener("resize", ()=>{
+  clearTimeout(rz);
+  rz = setTimeout(()=>{ if(!spinning) setText(el.themeText.textContent, true); }, 120);
+});
+
+/* ============================================================
+   8. クラウド同期
+   ・受信は常に自動。リンクを開いた全員が、最新のくじを自動で受け取ります。
+   ・スイッチは「この端末の変更を共有するかどうか」の切り替えです。
+     オンにした端末で編集すると、他の全員の画面にも反映されます。
+   ・保存先は、Netlifyに置いたサイトなら /api/kuji（Netlify Blobs）、
+     ファイルを直接開いた場合はそのブラウザ内になります。
+   ============================================================ */
+const API     = "/api/kuji";
+const PULL_MS = 5000;            // 最新の内容を取りに行く間隔
+const LKEY    = "kuji:data";     // 端末内保存のキー
+
+let publishOn = false;           // この端末の変更を共有するか
+let backend   = null;            // "server" | "local" | null
+let pushTimer = null;
+let pullTimer = null;
+let applying  = false;           // 受信内容を反映している最中
+let stamp     = 0;               // いま画面に出ているデータの更新時刻
+
+function pref(k, d){ try{ const v = localStorage.getItem(k); return v === null ? d : v; }catch(e){ return d; } }
+function setPref(k, v){ try{ localStorage.setItem(k, v); }catch(e){} }
+
+function syncSay(msg, warn){
+  el.syncStatus.textContent = msg || "";
+  el.syncStatus.classList.toggle("warn", !!warn);
+}
+function nowLabel(){
+  const d = new Date();
+  return ("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2);
+}
+
+/* --- 保存先ごとの読み書き --- */
+async function readRemote(){
+  try{
+    if(backend === "server"){
+      const r = await fetch(API, { cache:"no-store" });
+      if(!r.ok) throw new Error(r.status);
+      return await r.json();
+    }
+    if(backend === "local"){
+      const v = localStorage.getItem(LKEY);
+      return v ? JSON.parse(v) : null;
+    }
+  }catch(e){ return undefined; }   // undefined = 通信失敗、null = 中身なし
+  return null;
+}
+
+async function writeRemote(){
+  const payload = {
+    themes: themes,
+    drawn: drawn,
+    exclude: el.optExclude.checked,
+    updatedAt: Date.now()
+  };
+  stamp = payload.updatedAt;
+  try{
+    if(backend === "server"){
+      const r = await fetch(API, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if(!r.ok) throw new Error(r.status);
+      return true;
+    }
+    if(backend === "local"){
+      localStorage.setItem(LKEY, JSON.stringify(payload));
+      return true;
+    }
+  }catch(e){ return false; }
+  return false;
+}
+
+/* 共有オンの端末だけが送信する */
+function schedulePush(){
+  if(!publishOn || applying || !backend) return;
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(async ()=>{
+    const ok = await writeRemote();
+    syncSay(ok ? "全員に反映しました（"+nowLabel()+"）"
+               : "反映できませんでした。通信状態を確認してください。", !ok);
+  }, 800);
+}
+
+function applyRemote(data){
+  applying = true;
+  themes = Array.isArray(data.themes) ? data.themes.slice() : [];
+  drawn  = Array.isArray(data.drawn)  ? data.drawn.slice()  : [];
+  if(typeof data.exclude === "boolean") el.optExclude.checked = data.exclude;
+  stamp = data.updatedAt || Date.now();
+  render();
+  applying = false;
+  if(!spinning) resetStage();
+}
+
+/* 編集中に受信内容で上書きしてしまわないようにする */
+function isEditing(){
+  const a = document.activeElement;
+  if(!a) return false;
+  const tag = a.tagName.toLowerCase();
+  return (tag === "input" && a.type === "text") || tag === "textarea";
+}
+
+async function pullOnce(silent){
+  if(!backend || spinning) return;
+  if(silent && isEditing()) return;
+  const data = await readRemote();
+  if(data === undefined){ if(!silent) syncSay("接続できませんでした。", true); return; }
+  if(!data){ if(!silent) syncSay("まだ共有されたくじはありません。"); return; }
+  if((data.updatedAt || 0) > stamp){
+    applyRemote(data);
+    syncSay("最新のくじを受け取りました（"+nowLabel()+"）");
+  }else if(!silent){
+    syncSay("最新の状態です（"+nowLabel()+"）");
+  }
+}
+
+function startPull(){ clearInterval(pullTimer); pullTimer = setInterval(()=>pullOnce(true), PULL_MS); }
+
+/* --- 共有スイッチ --- */
+async function setPublish(on){
+  if(on && !backend){
+    el.optSync.checked = false;
+    syncSay("この環境では共有できません。", true);
+    return;
+  }
+  publishOn = on;
+  setPref("kuji:publish", on ? "1" : "0");
+
+  if(!on){
+    clearTimeout(pushTimer);
+    syncSay("共有をオフにしました。この端末での変更は他の人に反映されません（受信は続きます）。");
+    return;
+  }
+  const ok = await writeRemote();
+  syncSay(ok ? "共有をオンにしました。この端末の内容を全員に反映します（"+nowLabel()+"）"
+             : "反映できませんでした。通信状態を確認してください。", !ok);
+}
+
+/* --- 保存先の判定 --- */
+async function detectBackend(){
+  if(location.protocol === "http:" || location.protocol === "https:"){
+    try{
+      const r = await fetch(API, { cache:"no-store" });
+      if(r.ok) return "server";
+    }catch(e){ /* サーバーがなければ端末内保存へ */ }
+  }
+  try{ localStorage.setItem("__k","1"); localStorage.removeItem("__k"); return "local"; }
+  catch(e){ return null; }
+}
+
+async function initSync(){
+  backend = await detectBackend();
+
+  if(backend === "server"){
+    el.syncNote.textContent =
+      "オンにすると、この端末で編集した内容がリンクを開いた全員に反映されます。オフの端末は受け取るだけです。";
+  }else if(backend === "local"){
+    el.syncNote.textContent =
+      "サーバーに接続できないため、このブラウザ内に保存します（次に開いたとき続きから使えます）。";
+    el.syncHint.textContent = "※この開き方では、他の端末との共有はできません。";
+  }else{
+    el.syncNote.textContent = "この環境では保存できません。";
+    el.optSync.disabled = true;
+    el.syncHint.textContent = "";
+    return;
+  }
+
+  // 受信は常に自動。まず最新を取りに行き、その後も定期的に確認する。
+  await pullOnce(true);
+  startPull();
+
+  if(pref("kuji:publish","0") === "1"){
+    el.optSync.checked = true;
+    setPublish(true);
+  }
+}
+
+el.optSync.addEventListener("change", ()=>setPublish(el.optSync.checked));
+$("btnSyncNow").addEventListener("click", async ()=>{
+  await pullOnce(false);
+  if(publishOn){
+    const ok = await writeRemote();
+    if(ok) syncSay("全員に反映しました（"+nowLabel()+"）");
+  }
+});
+// 別タブ・別アプリから戻ってきたときにも最新を確認する
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) pullOnce(true); });
+
+/* 起動 */
+render();
+resetStage();
+initSync();
+</script>
+</body>
+</html>
