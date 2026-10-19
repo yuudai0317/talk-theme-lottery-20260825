@@ -44,6 +44,9 @@ button,input,textarea{font-family:inherit;}
   height:100%;
   display:grid;
   grid-template-rows:auto 1fr auto;
+  /* 押される前の決定印は scale(2.6) で待機しているため、
+     その分の領域が画面外にはみ出さないよう止めておく。 */
+  overflow:hidden;
 }
 
 /* --- ヘッダ --- */
@@ -211,6 +214,7 @@ textarea{
   padding:12px 13px;font-size:13.5px;line-height:1.85;
 }
 textarea::placeholder{color:#527069;}
+
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
 .notice{
   margin-top:10px;font-size:12px;line-height:1.7;color:var(--brass);
@@ -276,6 +280,48 @@ textarea::placeholder{color:#527069;}
   flex:0 0 1.9em;color:var(--brass);font-variant-numeric:tabular-nums;font-size:11.5px;
 }
 
+/* 操作列に置く共有スイッチ（共有が使える環境でのみ表示する） */
+.syncGroup{display:flex;align-items:center;gap:clamp(6px,.8vw,12px);}
+.syncGroup[hidden]{display:none;}
+.btn.switch{
+  display:inline-flex;align-items:center;gap:.7em;
+  padding:.5em 1.2em .5em .8em;cursor:pointer;
+}
+.btn.switch input{
+  appearance:none;margin:0;flex:0 0 auto;
+  width:34px;height:19px;border-radius:999px;
+  background:#0A2220;border:1px solid var(--ink-3);
+  position:relative;cursor:pointer;transition:background .2s,border-color .2s;
+}
+.btn.switch input::after{
+  content:"";position:absolute;top:2px;left:2px;
+  width:13px;height:13px;border-radius:50%;
+  background:var(--muted);transition:transform .2s,background .2s;
+}
+.btn.switch input:checked{background:#3D3213;border-color:var(--brass);}
+.btn.switch input:checked::after{transform:translateX(15px);background:var(--brass);}
+.btn.switch:has(input:checked){border-color:var(--brass);}
+.btn.switch:has(input:disabled){opacity:.45;cursor:not-allowed;}
+.btn.switch input:disabled{cursor:not-allowed;}
+
+/* くじ引き画面の操作結果を知らせる短い通知 */
+.toast{
+  /* 操作列は幅が狭いと折り返して高くなるため、その実高さの上に出す */
+  position:fixed;left:50%;bottom:calc(var(--bottomH,92px) + 14px);
+  transform:translate(-50%,10px);
+  max-width:min(88vw,560px);
+  background:var(--ink-2);
+  border:1px solid var(--ink-3);border-left:3px solid var(--brass);
+  border-radius:6px;padding:11px 18px;
+  color:var(--text-light);text-align:center;
+  font-size:clamp(12px,1vw,13.5px);line-height:1.6;
+  box-shadow:0 14px 34px rgba(0,0,0,.45);
+  opacity:0;pointer-events:none;z-index:30;
+  transition:opacity .22s,transform .22s;
+}
+.toast.on{opacity:1;transform:translate(-50%,0);}
+.toast.warn{border-left-color:var(--vermilion);color:#E39082;}
+
 .scrim{
   position:fixed;inset:0;background:rgba(4,16,15,.6);
   opacity:0;pointer-events:none;transition:opacity .3s;z-index:15;
@@ -327,9 +373,18 @@ textarea::placeholder{color:#527069;}
   <div class="bottom">
     <button class="btn primary" id="btnStart">スタート</button>
     <button class="btn" id="btnSettings">テーマを編集</button>
+    <div class="syncGroup" id="syncGroup" hidden>
+      <label class="btn switch">
+        <input type="checkbox" id="optSync">
+        <span>この端末の変更を共有する</span>
+      </label>
+      <button class="btn ghost" id="btnSyncNow">今すぐ確認</button>
+    </div>
     <button class="btn ghost" id="btnReset">履歴と除外をリセット</button>
     <button class="btn ghost" id="btnFull">全画面表示</button>
   </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </div>
 
 <div class="scrim" id="scrim"></div>
@@ -354,21 +409,6 @@ textarea::placeholder{color:#527069;}
     </div>
 
     <div class="sect">
-      <h3>テーマの共有</h3>
-      <p class="hint">リンクを開いた人は、共有された最新のテーマを自動で受け取ります。ボタンを押す必要はありません。</p>
-      <label class="toggle">
-        <input type="checkbox" id="optSync">
-        <span class="tx">この端末の変更を共有する
-          <small id="syncNote">オンにすると、この端末で編集した内容がリンクを開いた全員に反映されます。オフの端末は受け取るだけです。</small></span>
-      </label>
-      <div class="row">
-        <button class="btn ghost" id="btnSyncNow">今すぐ確認</button>
-      </div>
-      <p class="notice" id="syncStatus"></p>
-      <p class="hint" id="syncHint"></p>
-    </div>
-
-    <div class="sect">
       <h3>登録済みのテーマ</h3>
       <p class="hint">文字をクリックするとその場で直せます。</p>
       <ul class="list" id="list"></ul>
@@ -389,6 +429,15 @@ textarea::placeholder{color:#527069;}
         <span class="tx">効果音を鳴らす
           <small>回転中のカチカチ音と、決定音が鳴ります。</small></span>
       </label>
+      <label class="toggle">
+        <input type="checkbox" id="optSave" checked>
+        <span class="tx">この端末に保存する
+          <small id="saveNote">テーマ・履歴・いま出ているテーマを保存します。次に開いたときは、引いた結果が出たままの状態から続けられます。</small></span>
+      </label>
+      <div class="row">
+        <button class="btn ghost" id="btnSaveNow">今すぐ保存</button>
+      </div>
+      <p class="notice" id="saveStatus"></p>
     </div>
 
     <div class="sect">
@@ -420,15 +469,14 @@ const SAMPLE_THEMES = [
 ];
 
 /* ------------------------------------------------------------
-   状態（すべてメモリ内。ページを閉じると消えます）
-   ローカルに保存して使い回したい場合は、themes を localStorage に
-   保存する処理をここに追加してください。
+   状態
    ------------------------------------------------------------ */
 let themes  = SAMPLE_THEMES.slice();
 let drawn   = [];      // 出たテーマ（履歴と除外に使う）
 let spinning = false;
 let timer    = null;
 let lastShown = null;
+let current  = null;   // いま札に出ている決定済みのテーマ（null なら待機中）
 
 const $ = id => document.getElementById(id);
 const el = {
@@ -436,27 +484,28 @@ const el = {
   seal:$("seal"), start:$("btnStart"), notice:$("notice"),
   cRemain:$("cRemain"), cTotal:$("cTotal"), cHist:$("cHist"),
   list:$("list"), hist:$("hist"), input:$("input"),
-  drawer:$("drawer"), scrim:$("scrim"),
+  drawer:$("drawer"), scrim:$("scrim"), toast:$("toast"),
+  bottom:document.querySelector(".bottom"),
   optExclude:$("optExclude"), optSound:$("optSound"),
-  optSync:$("optSync"), syncNote:$("syncNote"), syncStatus:$("syncStatus"),
-  syncHint:$("syncHint")
+  optSave:$("optSave"), saveNote:$("saveNote"), saveStatus:$("saveStatus"),
+  syncGroup:$("syncGroup"), optSync:$("optSync")
 };
 
 /* ============================================================
    2. テーマの分割・正規化 ★改行ペースト対応の中心部分
    ============================================================ */
 // 行頭の箇条書き記号・連番を落とすためのパターン
-const BULLET = /^[\s\u3000]*(?:[・･‧⋅\-–—ー‐*＊+＋●○◯■□▪▫◆◇>＞»→]|[0-9０-９]{1,3}\s*[.)．）、，:：]|[（(]\s*[0-9０-９]{1,3}\s*[)）]|[①-⑳㉑-㉟]|[⑴-⒇]|[ⅰ-ⅹ]\s*[.)．）])\s*/;
+const BULLET = /^[\s　]*(?:[・･‧⋅\-–—ー‐*＊+＋●○◯■□▪▫◆◇>＞»→]|[0-9０-９]{1,3}\s*[.)．）、，:：]|[（(]\s*[0-9０-９]{1,3}\s*[)）]|[①-⑳㉑-㉟]|[⑴-⒇]|[ⅰ-ⅹ]\s*[.)．）])\s*/;
 
 function parseLines(raw){
   // 改行（CRLF / CR / LF）とタブで分割。Excelの列コピーにも対応。
   const rawLines = String(raw).split(/\r\n|\r|\n|\t/);
   const out = [];
   let dup = 0;
-  const seen = new Set(themesKeySetFromNothing());
+  const seen = new Set();
 
   for(let line of rawLines){
-    line = line.replace(/[\u3000\s]+/g," ");        // 全角スペース・連続空白を1つに
+    line = line.replace(/[　\s]+/g," ");        // 全角スペース・連続空白を1つに
     line = line.trim();
     if(!line) continue;                              // 空行は無視
     line = line.replace(BULLET,"").trim();           // 行頭記号・連番を除去
@@ -469,7 +518,6 @@ function parseLines(raw){
   }
   return {items:out, dup:dup};
 }
-function themesKeySetFromNothing(){ return []; }      // 分割時は入力内の重複のみ判定
 
 /* ============================================================
    3. 登録・一覧・履歴の描画
@@ -547,8 +595,9 @@ function render(){
     });
   }
 
-  // 内容が変わったらクラウドへ保存を予約
-  if(typeof schedulePush === "function") schedulePush();
+  // 内容が変わったら保存を予約し、共有リンクも作り直す
+  if(typeof scheduleSave    === "function") scheduleSave();
+  if(typeof netSchedulePush === "function") netSchedulePush();
 }
 
 function registerThemes(mode){
@@ -661,6 +710,7 @@ function beep(freq, dur, vol){
    6. 抽選
    ============================================================ */
 function resetStage(){
+  current = null;
   el.seal.classList.remove("on");
   el.fuda.classList.remove("decided");
   el.themeText.classList.remove("pop");
@@ -739,24 +789,21 @@ function startDraw(){
   tick();
 }
 
-function decide(result){
-  clearTimeout(timer);
-  timer = null;
-  spinning = false;
+// 決まったテーマを札に出したままにする。
+// 再読み込み後の復元でも使うため、演出の有無を animate で切り替える。
+function showDecided(result, animate){
+  current = result;
   el.fuda.classList.remove("spinning");
   el.fuda.classList.add("decided");
-
-  el.themeText.classList.remove("flick");
+  el.themeText.classList.remove("idle","flick","pop");
   setText(result, true);
-  void el.themeText.offsetWidth;
-  el.themeText.classList.add("pop");
+  if(animate){
+    void el.themeText.offsetWidth;
+    el.themeText.classList.add("pop");
+  }
+  el.seal.classList.remove("on");
+  void el.seal.offsetWidth;
   el.seal.classList.add("on");
-
-  beep(784, 0.14, 0.11);
-  setTimeout(()=>beep(1175, 0.3, 0.09), 120);
-
-  drawn.push(result);
-  render();
 
   el.start.disabled = false;
   el.start.textContent = "もう一度";
@@ -766,9 +813,43 @@ function decide(result){
     : "画面またはスペースキーでもう一度";
 }
 
+function decide(result){
+  clearTimeout(timer);
+  timer = null;
+  spinning = false;
+
+  drawn.push(result);
+  showDecided(result, true);
+
+  beep(784, 0.14, 0.11);
+  setTimeout(()=>beep(1175, 0.3, 0.09), 120);
+
+  render();
+
+  // 抽選中に届いた他の端末の変更は見送っているので、ここで取り直す
+  if(typeof netCatchUp === "function") netCatchUp();
+}
+
 /* ============================================================
    7. ドロワーとイベント
    ============================================================ */
+// 操作列の高さを CSS 変数に渡し、通知がボタンに重ならないようにする
+function syncBottomHeight(){
+  document.documentElement.style.setProperty("--bottomH", el.bottom.offsetHeight + "px");
+}
+if(window.ResizeObserver) new ResizeObserver(syncBottomHeight).observe(el.bottom);
+window.addEventListener("resize", syncBottomHeight);
+syncBottomHeight();
+
+let toastTimer = null;
+function toast(msg, warn){
+  el.toast.textContent = msg;
+  el.toast.classList.toggle("warn", !!warn);
+  el.toast.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>el.toast.classList.remove("on"), 3600);
+}
+
 function openDrawer(){
   el.drawer.classList.add("open");
   el.scrim.classList.add("on");
@@ -806,8 +887,10 @@ $("btnReset").addEventListener("click", ()=>{
   drawn = []; render(); resetStage();
 });
 $("btnFull").addEventListener("click", ()=>{
-  if(document.fullscreenElement) document.exitFullscreen();
-  else document.documentElement.requestFullscreen?.();
+  try{
+    if(document.fullscreenElement) document.exitFullscreen()?.catch?.(()=>{});
+    else document.documentElement.requestFullscreen?.()?.catch?.(()=>{});
+  }catch(e){ /* 全画面が使えない環境では無視 */ }
 });
 el.optExclude.addEventListener("change", ()=>{
   render();
@@ -847,198 +930,310 @@ window.addEventListener("resize", ()=>{
 });
 
 /* ============================================================
-   8. クラウド同期
-   ・受信は常に自動。リンクを開いた全員が、最新のくじを自動で受け取ります。
-   ・スイッチは「この端末の変更を共有するかどうか」の切り替えです。
-     オンにした端末で編集すると、他の全員の画面にも反映されます。
-   ・保存先は、Netlifyに置いたサイトなら /api/kuji（Netlify Blobs）、
-     ファイルを直接開いた場合はそのブラウザ内になります。
+   8. 保存と共有
+
+   保存：テーマ・履歴・いま出ているテーマを、この端末のブラウザに残します。
+         次に開いたときは、引いた結果が札に出たままの状態から続けられます。
+
+   共有：テーマと抽選の設定をURLの末尾（#k=…）に埋め込んだ共有リンクを作ります。
+         受け取った人はリンクを開くだけで同じテーマになり、設定作業は要りません。
+         ※履歴は端末ごとに別です。複数端末の「誰が何を引いたか」を
+           リアルタイムに突き合わせるにはサーバが必要なので、ここでは扱いません。
    ============================================================ */
-const API     = "/api/kuji";
-const PULL_MS = 5000;            // 最新の内容を取りに行く間隔
-const LKEY    = "kuji:data";     // 端末内保存のキー
+const SAVE_KEY  = "kuji:data";
+const SAVE_FLAG = "kuji:saveOn";
+const PULL_MS   = 4000;          // 同じブラウザの別タブの変更を取りに行く間隔
 
-let publishOn = false;           // この端末の変更を共有するか
-let backend   = null;            // "server" | "local" | null
-let pushTimer = null;
+let saveOn    = false;
+let backend   = null;            // "local" | null
+let saveTimer = null;
 let pullTimer = null;
-let applying  = false;           // 受信内容を反映している最中
-let stamp     = 0;               // いま画面に出ているデータの更新時刻
+let applying  = false;           // 読み込んだ内容を反映している最中
+let stamp     = 0;               // このページが持つデータの更新時刻
 
-function pref(k, d){ try{ const v = localStorage.getItem(k); return v === null ? d : v; }catch(e){ return d; } }
-function setPref(k, v){ try{ localStorage.setItem(k, v); }catch(e){} }
-
-function syncSay(msg, warn){
-  el.syncStatus.textContent = msg || "";
-  el.syncStatus.classList.toggle("warn", !!warn);
+function detectBackend(){
+  try{ localStorage.setItem("__k","1"); localStorage.removeItem("__k"); return "local"; }
+  catch(e){ return null; }
+}
+function saveSay(msg, warn){
+  el.saveStatus.textContent = msg || "";
+  el.saveStatus.classList.toggle("warn", !!warn);
 }
 function nowLabel(){
   const d = new Date();
   return ("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2);
 }
 
-/* --- 保存先ごとの読み書き --- */
-async function readRemote(){
+/* --- 保存 ------------------------------------------------------------ */
+function readStore(){
+  if(backend !== "local") return null;
   try{
-    if(backend === "server"){
-      const r = await fetch(API, { cache:"no-store" });
-      if(!r.ok) throw new Error(r.status);
-      return await r.json();
-    }
-    if(backend === "local"){
-      const v = localStorage.getItem(LKEY);
-      return v ? JSON.parse(v) : null;
-    }
-  }catch(e){ return undefined; }   // undefined = 通信失敗、null = 中身なし
-  return null;
+    const v = localStorage.getItem(SAVE_KEY);
+    return v ? JSON.parse(v) : null;
+  }catch(e){ return null; }
 }
 
-async function writeRemote(){
+function writeStore(){
+  if(backend !== "local") return false;
   const payload = {
     themes: themes,
     drawn: drawn,
+    current: current,
     exclude: el.optExclude.checked,
     updatedAt: Date.now()
   };
   stamp = payload.updatedAt;
   try{
-    if(backend === "server"){
-      const r = await fetch(API, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      if(!r.ok) throw new Error(r.status);
-      return true;
-    }
-    if(backend === "local"){
-      localStorage.setItem(LKEY, JSON.stringify(payload));
-      return true;
-    }
+    localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+    return true;
   }catch(e){ return false; }
-  return false;
 }
 
-/* 共有オンの端末だけが送信する */
-function schedulePush(){
-  if(!publishOn || applying || !backend) return;
-  clearTimeout(pushTimer);
-  pushTimer = setTimeout(async ()=>{
-    const ok = await writeRemote();
-    syncSay(ok ? "全員に反映しました（"+nowLabel()+"）"
-               : "反映できませんでした。通信状態を確認してください。", !ok);
-  }, 800);
+function scheduleSave(){
+  if(!saveOn || applying || !backend) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>{
+    const ok = writeStore();
+    saveSay(ok ? "保存しました（"+nowLabel()+"）"
+               : "保存できませんでした。ブラウザの設定を確認してください。", !ok);
+  }, 600);
 }
 
-function applyRemote(data){
+// 保存された内容を画面に戻す。決定済みのテーマがあれば、それを札に出したままにする。
+function applyStored(data){
+  applying = true;
+  if(Array.isArray(data.themes)) themes = data.themes.slice();
+  drawn = Array.isArray(data.drawn) ? data.drawn.slice() : [];
+  if(typeof data.exclude === "boolean") el.optExclude.checked = data.exclude;
+  stamp = data.updatedAt || Date.now();
+
+  render();
+  applying = false;
+  if(spinning) return;
+  const keep = (typeof data.current === "string" && themes.indexOf(data.current) >= 0)
+    ? data.current : null;
+  if(keep) showDecided(keep, false);
+  else     resetStage();
+}
+
+// 同じブラウザの別タブで変更されていたら取り込む。
+// いま札に出ているテーマは、こちらの表示を優先して消さない。
+function pullOnce(silent){
+  if(!saveOn || !backend || spinning) return;
+  const data = readStore();
+  if(!data){ if(!silent) saveSay("保存されたくじはまだありません。"); return; }
+  if((data.updatedAt || 0) > stamp){
+    const keepLocal = current;
+    applyStored(data);
+    if(keepLocal && themes.indexOf(keepLocal) >= 0) showDecided(keepLocal, false);
+    saveSay("別のタブの変更を読み込みました（"+nowLabel()+"）");
+  }else if(!silent){
+    saveSay("最新の状態です（"+nowLabel()+"）");
+  }
+}
+
+function startPull(){
+  clearInterval(pullTimer);
+  pullTimer = setInterval(()=>pullOnce(true), PULL_MS);
+}
+function stopPull(){ clearInterval(pullTimer); pullTimer = null; }
+
+function setSave(on){
+  if(on && !backend){
+    el.optSave.checked = false;
+    saveSay("このブラウザでは保存できません。", true);
+    return;
+  }
+  saveOn = on;
+  try{ localStorage.setItem(SAVE_FLAG, on ? "1" : "0"); }catch(e){}
+  if(!on){
+    stopPull();
+    clearTimeout(saveTimer);
+    saveSay("保存をオフにしました。この後の変更は残りません。");
+    return;
+  }
+  const ok = writeStore();
+  saveSay(ok ? "保存をオンにしました（"+nowLabel()+"）" : "保存できませんでした。", !ok);
+  startPull();
+}
+
+/* --- 起動時の読み込み ------------------------------------------------ */
+function initStore(){
+  backend = detectBackend();
+  if(!backend){
+    el.optSave.checked = false;
+    el.optSave.disabled = true;
+    el.saveNote.textContent = "このブラウザでは保存できません（履歴はこのページを開いている間だけ残ります）。";
+    saveOn = false;
+  }else{
+    let flag = null;
+    try{ flag = localStorage.getItem(SAVE_FLAG); }catch(e){}
+    saveOn = (flag !== "0");          // 既定でオン
+    el.optSave.checked = saveOn;
+  }
+
+  const data = saveOn ? readStore() : null;
+  if(data){
+    applyStored(data);
+    saveSay("前回の状態を読み込みました（"+nowLabel()+"）");
+  }else{
+    render();
+    resetStage();
+  }
+  if(saveOn) startPull();
+}
+
+el.optSave.addEventListener("change", ()=>setSave(el.optSave.checked));
+$("btnSaveNow").addEventListener("click", ()=>{
+  if(!el.optSave.checked){ saveSay("先に保存をオンにしてください。", true); return; }
+  pullOnce(false);
+  const ok = writeStore();
+  saveSay(ok ? "保存しました（"+nowLabel()+"）" : "保存できませんでした。", !ok);
+});
+
+/* ============================================================
+   9. 端末間の共有（/api/kuji ＝ Netlify Functions + Blobs）
+
+   ・受け取りは常時。同じURLを開いた端末の変更が届きます。
+   ・送り出すのは「この端末の変更を共有する」がオンの端末だけで、
+     オフの端末は受け取るだけです。
+   ・同期APIが無い場所（ファイルを直接開いた場合、関数の無いホスト）では
+     スイッチごと出さず、単独のアプリとして動きます。
+   ============================================================ */
+const API        = "/api/kuji";
+const SHARE_FLAG = "kuji:shareOn";
+const POLL_MS    = 5000;
+
+let apiOK     = false;
+let shareOn   = false;
+let netStamp  = 0;        // 取り込み済み／送信済みの更新時刻
+let netTimer  = null;
+let netMissed = false;    // 抽選中に届いて見送った変更があるか
+
+function netSnapshot(){
+  return {
+    themes: themes,
+    drawn: drawn,
+    current: current,
+    exclude: el.optExclude.checked,
+    updatedAt: Date.now()
+  };
+}
+
+async function netPush(){
+  if(!apiOK || !shareOn) return;
+  const body = netSnapshot();
+  netStamp = body.updatedAt;            // 自分の書き込みを読み返さないため
+  try{
+    const r = await fetch(API, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if(!r.ok) throw new Error(r.status);
+    // 保存時刻はサーバーが付け直すので、その値に合わせておく。
+    // そうしないと次の確認で自分の書き込みを「他端末の変更」として読み返す。
+    const saved = await r.json().catch(()=>null);
+    if(saved && Number.isFinite(saved.updatedAt)) netStamp = saved.updatedAt;
+    toast("この端末の内容を共有しました（"+nowLabel()+"）");
+  }catch(e){
+    toast("共有できませんでした。通信を確認してください。", true);
+  }
+}
+
+function netSchedulePush(){
+  if(!apiOK || !shareOn || applying) return;
+  clearTimeout(netTimer);
+  netTimer = setTimeout(netPush, 700);
+}
+
+// 受け取った内容を画面に反映する。抽選中は見送り、抽選後に取り直す。
+function netApply(data, announce){
+  if(!data) return false;
+  const at = Number(data.updatedAt) || 0;
+  if(at <= netStamp) return false;
+  if(spinning){ netMissed = true; return false; }
+  netStamp = at;
+
   applying = true;
   themes = Array.isArray(data.themes) ? data.themes.slice() : [];
   drawn  = Array.isArray(data.drawn)  ? data.drawn.slice()  : [];
   if(typeof data.exclude === "boolean") el.optExclude.checked = data.exclude;
-  stamp = data.updatedAt || Date.now();
   render();
   applying = false;
-  if(!spinning) resetStage();
+
+  const keep = (typeof data.current === "string" && themes.indexOf(data.current) >= 0)
+    ? data.current : null;
+  if(keep) showDecided(keep, false);
+  else     resetStage();
+
+  if(saveOn) writeStore();
+  if(announce) toast("他の端末の変更を受け取りました（"+nowLabel()+"）");
+  return true;
 }
 
-/* 編集中に受信内容で上書きしてしまわないようにする */
-function isEditing(){
-  const a = document.activeElement;
-  if(!a) return false;
-  const tag = a.tagName.toLowerCase();
-  return (tag === "input" && a.type === "text") || tag === "textarea";
-}
-
-async function pullOnce(silent){
-  if(!backend || spinning) return;
-  if(silent && isEditing()) return;
-  const data = await readRemote();
-  if(data === undefined){ if(!silent) syncSay("接続できませんでした。", true); return; }
-  if(!data){ if(!silent) syncSay("まだ共有されたくじはありません。"); return; }
-  if((data.updatedAt || 0) > stamp){
-    applyRemote(data);
-    syncSay("最新のくじを受け取りました（"+nowLabel()+"）");
-  }else if(!silent){
-    syncSay("最新の状態です（"+nowLabel()+"）");
+async function netPull(announce){
+  if(!apiOK) return false;
+  try{
+    const r = await fetch(API, { cache: "no-store" });
+    if(!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    if(!data){
+      if(announce) toast("共有されているくじはまだありません。");
+      return false;
+    }
+    const changed = netApply(data, announce);
+    if(announce && !changed) toast("すでに最新の状態です（"+nowLabel()+"）");
+    return changed;
+  }catch(e){
+    if(announce) toast("確認できませんでした。通信を確認してください。", true);
+    return false;
   }
 }
 
-function startPull(){ clearInterval(pullTimer); pullTimer = setInterval(()=>pullOnce(true), PULL_MS); }
-
-/* --- 共有スイッチ --- */
-async function setPublish(on){
-  if(on && !backend){
-    el.optSync.checked = false;
-    syncSay("この環境では共有できません。", true);
-    return;
-  }
-  publishOn = on;
-  setPref("kuji:publish", on ? "1" : "0");
-
-  if(!on){
-    clearTimeout(pushTimer);
-    syncSay("共有をオフにしました。この端末での変更は他の人に反映されません（受信は続きます）。");
-    return;
-  }
-  const ok = await writeRemote();
-  syncSay(ok ? "共有をオンにしました。この端末の内容を全員に反映します（"+nowLabel()+"）"
-             : "反映できませんでした。通信状態を確認してください。", !ok);
+// 抽選中に見送った変更を取り直す（送り出す端末は、この後の送信が最新になる）
+function netCatchUp(){
+  if(!netMissed) return;
+  netMissed = false;
+  if(shareOn) return;
+  netPull(true);
 }
 
-/* --- 保存先の判定 --- */
-async function detectBackend(){
-  if(location.protocol === "http:" || location.protocol === "https:"){
-    try{
-      const r = await fetch(API, { cache:"no-store" });
-      if(r.ok) return "server";
-    }catch(e){ /* サーバーがなければ端末内保存へ */ }
-  }
-  try{ localStorage.setItem("__k","1"); localStorage.removeItem("__k"); return "local"; }
-  catch(e){ return null; }
-}
-
-async function initSync(){
-  backend = await detectBackend();
-
-  if(backend === "server"){
-    el.syncNote.textContent =
-      "オンにすると、この端末で編集した内容がリンクを開いた全員に反映されます。オフの端末は受け取るだけです。";
-  }else if(backend === "local"){
-    el.syncNote.textContent =
-      "サーバーに接続できないため、このブラウザ内に保存します（次に開いたとき続きから使えます）。";
-    el.syncHint.textContent = "※この開き方では、他の端末との共有はできません。";
+el.optSync.addEventListener("change", ()=>{
+  shareOn = el.optSync.checked;
+  try{ localStorage.setItem(SHARE_FLAG, shareOn ? "1" : "0"); }catch(e){}
+  if(shareOn){
+    toast("この端末の変更を共有します。テーマの編集も抽選結果も、同じURLを開いた全員に反映されます。");
+    netPush();
   }else{
-    el.syncNote.textContent = "この環境では保存できません。";
-    el.optSync.disabled = true;
-    el.syncHint.textContent = "";
-    return;
-  }
-
-  // 受信は常に自動。まず最新を取りに行き、その後も定期的に確認する。
-  await pullOnce(true);
-  startPull();
-
-  if(pref("kuji:publish","0") === "1"){
-    el.optSync.checked = true;
-    setPublish(true);
-  }
-}
-
-el.optSync.addEventListener("change", ()=>setPublish(el.optSync.checked));
-$("btnSyncNow").addEventListener("click", async ()=>{
-  await pullOnce(false);
-  if(publishOn){
-    const ok = await writeRemote();
-    if(ok) syncSay("全員に反映しました（"+nowLabel()+"）");
+    toast("共有をオフにしました。この端末は受け取るだけになります。");
   }
 });
-// 別タブ・別アプリから戻ってきたときにも最新を確認する
-document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) pullOnce(true); });
+$("btnSyncNow").addEventListener("click", ()=>netPull(true));
+
+async function initNet(){
+  let data = null;
+  try{
+    const r = await fetch(API, { cache: "no-store" });
+    if(!r.ok) return;                  // 同期APIが無い環境ではスイッチを出さない
+    data = await r.json();
+  }catch(e){ return; }
+
+  apiOK = true;
+  el.syncGroup.hidden = false;
+  try{ shareOn = localStorage.getItem(SHARE_FLAG) === "1"; }catch(e){}
+  el.optSync.checked = shareOn;
+
+  netApply(data, false);               // 起動時はまず受け取る
+
+  setInterval(()=>{ if(!document.hidden) netPull(false); }, POLL_MS);
+  document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) netPull(false); });
+  window.addEventListener("focus", ()=>netPull(false));
+}
 
 /* 起動 */
-render();
-resetStage();
-initSync();
+initStore();
+initNet();
 </script>
 </body>
 </html>

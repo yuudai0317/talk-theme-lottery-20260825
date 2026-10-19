@@ -4,6 +4,8 @@ import type { Config, Context } from "@netlify/functions";
 type KujiState = {
   themes: string[];
   drawn: string[];
+  /** いま札に出ている決定済みのテーマ。未抽選なら null。 */
+  current: string | null;
   exclude: boolean;
   updatedAt: number;
 };
@@ -34,17 +36,28 @@ function cleanTextList(value: unknown, maxItems: number): string[] | null {
   return items;
 }
 
+function cleanCurrent(value: unknown): string | null | undefined {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") return undefined;      // undefined = 不正
+  const text = value.trim();
+  if (!text || text.length > MAX_THEME_LENGTH) return undefined;
+  return text;
+}
+
 function parseState(value: unknown): KujiState | null {
   if (!value || typeof value !== "object") return null;
   const input = value as Record<string, unknown>;
   const themes = cleanTextList(input.themes, MAX_THEMES);
   const drawn = cleanTextList(input.drawn, MAX_DRAWN);
+  const current = cleanCurrent(input.current);
 
-  if (!themes || !drawn || typeof input.exclude !== "boolean") return null;
+  if (!themes || !drawn || current === undefined) return null;
+  if (typeof input.exclude !== "boolean") return null;
 
   return {
     themes,
     drawn,
+    current,
     exclude: input.exclude,
     updatedAt: Date.now(),
   };
