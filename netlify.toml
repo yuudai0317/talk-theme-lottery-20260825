@@ -1,6 +1,15 @@
+# GitHub と連携すると、このファイルの設定でそのまま公開できます。
+# アプリ本体（index.html）はビルド不要。関数だけ Netlify が組み立てます。
 [build]
   publish = "."
+  command = ""
 
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
+
+# 同期APIはキャッシュさせない
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Cache-Control = "no-store"
